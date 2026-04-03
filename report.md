@@ -231,36 +231,43 @@ Task 3 – No Integrity
 Modify a ciphertext byte and show that AES-CBC still decrypts without error.
 """
 
-import os
-from task2_aes_cbc import aes_cbc_encrypt, aes_cbc_decrypt, PLAINTEXT_FILE
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
 
+#Setup
+Key = get_random_bytes(16)
+IV = get_random_bytes(16)
 
-def tamper(ciphertext: bytes, byte_index: int = 0) -> bytes:
-    ct = bytearray(ciphertext)
-    ct[byte_index] ^= 0xFF
-    return bytes(ct)
+#Read the local message file
+with open("message1.txt", "rb") as f:
+    Message = f.read()
 
+#Encrypt the original message
+Cipher = AES.new(Key, AES.MODE_CBC, IV)
+Ciphertext = Cipher.encrypt(pad(Message, AES.block_size))
 
-def main():
-    key = os.urandom(32)
-    iv  = os.urandom(16)
+print("=== Task 3: Lack of Integrity ===")
+print("Original Ciphertext:", Ciphertext.hex())
 
-    with open(PLAINTEXT_FILE, "rb") as f:
-        plaintext = f.read()
+#Flip the very first bit of the ciphertext
+Tampered = bytearray(Ciphertext)
+Tampered[0] ^= 1 
+Tampered = bytes(Tampered)
 
-    ciphertext         = aes_cbc_encrypt(key, iv, plaintext)
-    tampered_ct        = tamper(ciphertext)
-    decrypted_tampered = aes_cbc_decrypt(key, iv, tampered_ct)
+print("Tampered Ciphertext:", Tampered.hex())
 
-    print("=== Task 3: No Integrity ===\n")
-    print(f"Original ciphertext : {ciphertext.hex()}")
-    print(f"Tampered ciphertext : {tampered_ct.hex()}")
-    print(f"Decrypted (tampered): {decrypted_tampered!r}")
-    print("\nObservation: decryption succeeded despite tampering — no integrity check.")
+#Attempt decryption
+try:
+    Decrypter = AES.new(Key, AES.MODE_CBC, IV)
+    DecryptedData = Decrypter.decrypt(Tampered)
+    Plaintext = unpad(DecryptedData, AES.block_size)
+    print("Recovered (Tampered):", Plaintext.decode(errors='replace'))
+except Exception as e:
+    print(f"Decryption error: {e}")
+    # Even if unpad fails, the raw bits are still there
+    print("Raw bits (In event of failure):", DecryptedData.hex()[:32])
 
-
-if __name__ == "__main__":
-    main()
 ```
 
 ### Steps
@@ -268,14 +275,12 @@ if __name__ == "__main__":
 **Step 1 — Run the no-integrity script**
 
 ```bash
-python code/task3_no_integrity.py
+python3 cbc_tamper.py
 ```
 
 ### Screenshots
 
-**Screenshot 1 — `task3_no_integrity.py` terminal output**
-
-<!-- Insert screenshot: terminal showing original ciphertext, tampered ciphertext, and the garbled decrypted output -->
+![alt text](screenshots/task3.png)
 
 *What to observe:* The original and tampered ciphertexts differ in exactly one byte. Decryption
 completes with no exception, but the recovered plaintext is corrupted — proving AES-CBC has no
@@ -283,10 +288,7 @@ built-in integrity check.
 
 ### Explanation
 
-In CBC mode, flipping a bit in ciphertext block *N* has two effects on decryption: block *N*
-decrypts to garbage (randomized), and the corresponding bit in block *N+1* is predictably
-flipped. The decryption function has no way to detect this tampering because AES-CBC carries
-no authentication tag. An attacker can silently corrupt messages in transit.
+In CBC mode, flipping a single bit in ciphertext block *N* has two effects on decryption. It effects block *N* by flipping a bit and then decrypts to now randomized garbage, and the corresponding bit in block *N+1* is also effected by being predictably flipped. The decryption function has no way to detect this tampering because AES-CBC carries no way to authenticate like an authentication tag. This means that an attacker can silently corrupt messages in that are in transit.
 
 ---
 
@@ -305,38 +307,81 @@ Task 4 – CBC Bit-Flipping Attack
 """
 
 import os
-from task2_aes_cbc import aes_cbc_encrypt, aes_cbc_decrypt, PLAINTEXT_FILE
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
 
 
-def bit_flip_attack(ciphertext: bytes, target_byte: int, xor_mask: int) -> bytes:
-    ct = bytearray(ciphertext)
-    ct[target_byte] ^= xor_mask
-    return bytes(ct)
+def PrintBlocks(data: bytes, title: str):
+    """Prints binary data block by block (16 bytes each)"""
+    print(f"\n--- {title} (Block-by-Block) ---")
+    for i in range(0, len(data), 16):
+        block = data[i:i+16]
+        ascii_rep = "".join(chr(b) if 32 <= b <= 126 else '.' for b in block)
+        print(f"Block {i//16}: Hex: {block.hex():<32} | ASCII: {ascii_rep}")
+
+Key = get_random_bytes(16)
+IV = get_random_bytes(16)
+Filename = "msg4.txt"
+
+if not os.path.exists(Filename):
+    with open(Filename, "wb") as f:
+        f.write(b"Transfer 100 dollars to Bob. Approve transfer immediately.")
+
+#Encrypt
+with open(Filename, "rb") as f:
+    Plaintext = f.read()
+
+PaddedPlaintext = pad(Plaintext, AES.block_size)
+Cipher = AES.new(Key, AES.MODE_CBC, IV)
+Ciphertext = Cipher.encrypt(PaddedPlaintext)
+
+print("=== Task 4: CBC Bit-Flipping Experiment ===")
+
+#Print ciphertext lenght and block count
+BlockCount = len(Ciphertext) // AES.block_size
+print(f"\nCiphertext Length: {len(Ciphertext)} bytes")
+print(f"Block Count:       {BlockCount} blocks")
+
+#Prints non tampered data
+PrintBlocks(PaddedPlaintext, "Original Plaintext")
+PrintBlocks(Ciphertext, "Original Ciphertext")
 
 
-def main():
-    key = os.urandom(32)
-    iv  = os.urandom(16)
+#Flip one byte
+TamperedCT = bytearray(Ciphertext)
+TargetByteIndex = 9
 
-    with open(PLAINTEXT_FILE, "rb") as f:
-        plaintext = f.read()
+#Record the original byte
+OriginalByte = TamperedCT[TargetByteIndex]
 
-    ciphertext = aes_cbc_encrypt(key, iv, plaintext)
+#Perform the flip, the Original Character XOR Target Character
+TamperedCT[TargetByteIndex] ^= ord('1') ^ ord('9')
 
-    target_byte = 0
-    xor_mask    = 0x01
+TamperedByte = TamperedCT[TargetByteIndex]
+TamperedCT = bytes(TamperedCT)
 
-    flipped_ct        = bit_flip_attack(ciphertext, target_byte, xor_mask)
-    decrypted_flipped = aes_cbc_decrypt(key, iv, flipped_ct)
-
-    print("=== Task 4: Bit-Flipping Attack ===\n")
-    print(f"Original plaintext : {plaintext!r}")
-    print(f"Decrypted (flipped): {decrypted_flipped!r}")
-    print("\nObservation: a single-bit change in the ciphertext altered the plaintext predictably.")
+print(f"\nTAMPERING EVENT")
+print(f"Flipped byte at index {TargetByteIndex} of Ciphertext Block 0.")
+print(f"Original Byte Value: 0x{OriginalByte:02x}")
+print(f"Tampered Byte Value: 0x{TamperedByte:02x}")
 
 
-if __name__ == "__main__":
-    main()
+Decrypter = AES.new(Key, AES.MODE_CBC, IV)
+
+try:
+    #Decrypt the tampered ciphertext
+    DecryptedData = Decrypter.decrypt(TamperedCT)
+    
+    PrintBlocks(DecryptedData, "Modified Decrypted Output")
+    
+    print("\n--- Final Comparison ---")
+    print(f"Original: {Plaintext.decode()}")
+    print(f"Modified: {DecryptedData.decode(errors='replace')}")
+
+except Exception as e:
+    print(f"\nDecryption Failed: {e}")
+
 ```
 
 ### Steps
@@ -344,14 +389,12 @@ if __name__ == "__main__":
 **Step 1 — Run the bit-flip script**
 
 ```bash
-python code/task4_bit_flip.py
+python3 cbc_bit_flip.py
 ```
 
 ### Screenshots
 
-**Screenshot 1 — `task4_bit_flip.py` terminal output**
-
-<!-- Insert screenshot: terminal showing original plaintext and the modified decrypted output side by side -->
+![alt text](screenshots/task4.png)
 
 *What to observe:* The original plaintext and the flipped decrypted output differ at a
 predictable position. Block 1 of the decryption is corrupted (random-looking), while block 2
@@ -359,11 +402,7 @@ has the targeted bit flipped exactly as intended — demonstrating controlled pl
 
 ### Explanation
 
-In CBC decryption, block *i* of plaintext is computed as `AES_decrypt(C[i]) XOR C[i-1]`.
-Flipping bit *j* of `C[i-1]` therefore flips bit *j* of `P[i]`. An attacker who knows
-the plaintext layout can craft a precise modification — for example, changing a field value —
-without knowing the key. This is the CBC malleability vulnerability, and it is the reason
-authenticated encryption (not just encryption) is required for secure systems.
+In CBC the decryption block *i* of plaintext is computed as `AES_decrypt(C[i]) XOR C[i-1]`. Flipping a bit *j* of `C[i-1]` therefore flips the bit *j* of `P[i]`. An attacker who knows the plaintext can then craft a precise modification. A good example of this is, changing a field value without knowing the key. This is the CBC malleability vulnerability, and it is the reason authenticated encryption is a necessity for secure systems.
 
 ---
 
@@ -382,41 +421,41 @@ untampered case but is easily defeated (see Task 6).
 Task 5 – Redundancy Check
 """
 
-import os
-from task2_aes_cbc import aes_cbc_encrypt, aes_cbc_decrypt, PLAINTEXT_FILE
+import hashlib
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
 
-REDUNDANCY = b"VERIFY_OK"
+Key = get_random_bytes(16)
+IV = get_random_bytes(16)
 
+with open("message2.txt", "rb") as f:
+    Message = f.read()
 
-def encrypt_with_redundancy(key: bytes, iv: bytes, plaintext: bytes) -> bytes:
-    return aes_cbc_encrypt(key, iv, plaintext + REDUNDANCY)
+#Compute Redundancy (First 8 bytes of SHA-256)
+Redundancy = hashlib.sha256(Message).digest()[:8]
+CombinedData = Message + Redundancy
 
+#Encrypt
+Cipher = AES.new(Key, AES.MODE_CBC, IV)
+Ciphertext = Cipher.encrypt(pad(CombinedData, AES.block_size))
 
-def decrypt_and_verify(key: bytes, iv: bytes, ciphertext: bytes) -> tuple[bytes, bool]:
-    decrypted = aes_cbc_decrypt(key, iv, ciphertext)
-    if decrypted.endswith(REDUNDANCY):
-        return decrypted[: -len(REDUNDANCY)], True
-    return decrypted, False
+#Decrypt and Verify
+Decrypter = AES.new(Key, AES.MODE_CBC, IV)
+DecryptedData = unpad(Decrypter.decrypt(Ciphertext), AES.block_size)
 
+#Separate the components
+RecoveredMsg = DecryptedData[:-8]
+RecoveredHash = DecryptedData[-8:]
 
-def main():
-    key = os.urandom(32)
-    iv  = os.urandom(16)
+#Check if it matches
+CheckHash = hashlib.sha256(RecoveredMsg).digest()[:8]
 
-    with open(PLAINTEXT_FILE, "rb") as f:
-        plaintext = f.read()
-
-    ciphertext          = encrypt_with_redundancy(key, iv, plaintext)
-    recovered, is_valid = decrypt_and_verify(key, iv, ciphertext)
-
-    print("=== Task 5: Redundancy ===\n")
-    print(f"Redundancy value : {REDUNDANCY!r}")
-    print(f"Integrity check  : {'PASS' if is_valid else 'FAIL'}")
-    print(f"Recovered text   : {recovered!r}")
-
-
-if __name__ == "__main__":
-    main()
+print("=== Task 5: Redundancy Scheme ===")
+if CheckHash == RecoveredHash:
+    print("Verification: PASS. Message is authentic.")
+else:
+    print("Verification: FAIL.")
 ```
 
 ### Steps
@@ -424,24 +463,19 @@ if __name__ == "__main__":
 **Step 1 — Run the redundancy script**
 
 ```bash
-python code/task5_redundancy.py
+python3 redundancy_enc.py
 ```
 
 ### Screenshots
 
-**Screenshot 1 — `task5_redundancy.py` terminal output**
-
-<!-- Insert screenshot: terminal showing redundancy value, PASS result, and recovered plaintext -->
+![alt text](screenshots/task5.png)
 
 *What to observe:* The integrity check reports PASS and the recovered text matches the original
 message, confirming the scheme works when no tampering has occurred.
 
 ### Explanation
 
-Appending a known sentinel value and checking for it after decryption can detect *random*
-corruption with some probability, but it is not a cryptographic integrity mechanism. As shown
-in Task 6, an attacker who knows the redundancy value can craft ciphertext modifications that
-either preserve the sentinel or bypass the check entirely.
+Appending a known value and checking for it after decryption can detect *random* corruption with some amount of legitimate probability, but it is not a cryptographic integrity mechanism. An attacker who knows the redundancy value can craft ciphertext modifications that either preserve the known value or bypass the check entirely.
 
 ---
 
@@ -459,42 +493,92 @@ that the check can be bypassed and is therefore cryptographically insecure.
 Task 6 – Break Redundancy
 """
 
+import hashlib
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
 import os
-from task5_redundancy import encrypt_with_redundancy, decrypt_and_verify, REDUNDANCY, PLAINTEXT_FILE
-from task2_aes_cbc import aes_cbc_encrypt
+
+Key = get_random_bytes(16)
+IV = get_random_bytes(16)
+
+#Read message2.txt
+if not os.path.exists("message2.txt"):
+    with open("message2.txt", "wb") as f:
+        f.write(b"Transfer 500 dollars to Alice")
+
+with open("message2.txt", "rb") as f:
+    Message = f.read()
+
+print("=== Task 6: Attacking Redundancy ===")
+print(f"Original Message: {Message.decode()}\n")
+
+#Encryption with redundancy
+Redundancy = hashlib.sha256(Message).digest()[:8]
+CombinedData = Message + Redundancy
+PaddedData = pad(CombinedData, AES.block_size)
+
+Cipher = AES.new(Key, AES.MODE_CBC, IV)
+OriginalCiphertext = Cipher.encrypt(PaddedData)
 
 
-def tamper_ciphertext(ciphertext: bytes, index: int, mask: int = 0xFF) -> bytes:
-    ct = bytearray(ciphertext)
-    ct[index] ^= mask
-    return bytes(ct)
+#Tampering
+def attempt_tampering(TamperedCT: bytes, TestName: str):
+    """
+    Attempts to decrypt and verify a tampered ciphertext.
+    Returns whether the redundancy check passed or failed.
+    """
+    print(f"--- {TestName} ---")
+    
+    Decrypter = AES.new(Key, AES.MODE_CBC, IV)
+    try:
+        #Decrypt and Unpad
+        DecryptedData = unpad(Decrypter.decrypt(TamperedCT), AES.block_size)
+        
+        #Separate Message and Redundancy Hash
+        RecoveredMsg = DecryptedData[:-8]
+        RecoveredHash = DecryptedData[-8:]
+        
+        #Recompute Hash and Verify
+        CheckHash = hashlib.sha256(RecoveredMsg).digest()[:8]
+
+        if CheckHash == RecoveredHash:
+            print("Verification: PASS [The attack not detected]")
+            print(f"    Recovered Msg: {RecoveredMsg.decode(errors='replace')}")
+        else:
+            print("Verification: FAIL [The has system detected tampering]")
+            print(f"    Expected Hash: {CheckHash.hex()}")
+            print(f"    Received Hash: {RecoveredHash.hex()}")
+            
+    except ValueError as e:
+        # This catches "Padding is incorrect."
+        print(f"Verification: FAIL [System Error during Decryption]")
+        print(f"    Error Details: {e}")
+    except Exception as e:
+        print(f"Verification: FAIL [Unexpected Error: {e}]")
+    print()
 
 
-def main():
-    key = os.urandom(32)
-    iv  = os.urandom(16)
+#Tampering attempts
 
-    with open(PLAINTEXT_FILE, "rb") as f:
-        plaintext = f.read()
+#Attempt 1: Tamper with the Message Body (Tamper with Index 5)
+Tampered1 = bytearray(OriginalCiphertext)
+Tampered1[5] ^= 0xFF
+attempt_tampering(bytes(Tampered1), "Attempt 1: Tamper Message Body")
 
-    ciphertext = encrypt_with_redundancy(key, iv, plaintext)
+#Attempt 2: Tamper with the Redundancy Hash
+Tampered2 = bytearray(OriginalCiphertext)
+HashStartIndex = len(OriginalCiphertext) - AES.block_size - 8
+SafeIndex = len(OriginalCiphertext) - 10 
+Tampered2[SafeIndex] ^= 0x01
+attempt_tampering(bytes(Tampered2), f"Attempt 2: Tamper near Redundancy Hash")
 
-    tampering_attempts = [
-        ("Flip byte 0",  tamper_ciphertext(ciphertext, 0)),
-        ("Flip byte 8",  tamper_ciphertext(ciphertext, 8)),
-        ("Flip byte 16", tamper_ciphertext(ciphertext, 16)),
-    ]
+#Attempt 3: Tamper with the Padding
+Tampered3 = bytearray(OriginalCiphertext)
+LastIndex = len(OriginalCiphertext) - 1
+Tampered3[LastIndex] ^= 0x01
+attempt_tampering(bytes(Tampered3), f"Attempt 3: Tamper Padding")
 
-    print("=== Task 6: Break Redundancy ===\n")
-    for label, tampered in tampering_attempts:
-        _, is_valid = decrypt_and_verify(key, iv, tampered)
-        print(f"{label:20s} → {'PASS (not detected)' if is_valid else 'FAIL (detected)'}")
-
-    print("\nConclusion: redundancy alone is cryptographically insecure.")
-
-
-if __name__ == "__main__":
-    main()
 ```
 
 ### Steps
@@ -502,14 +586,12 @@ if __name__ == "__main__":
 **Step 1 — Run the break-redundancy script**
 
 ```bash
-python code/task6_break_redundancy.py
+python3 redundancy_enc_tamp.py
 ```
 
 ### Screenshots
 
-**Screenshot 1 — `task6_break_redundancy.py` terminal output**
-
-<!-- Insert screenshot: terminal showing results of all three tampering attempts (pass/fail per attempt) -->
+![alt text](screenshots/task6.png)
 
 *What to observe:* Some tampering attempts may pass (not detected) because the corruption lands
 in the message body rather than the redundancy suffix. This shows the scheme cannot reliably
@@ -517,11 +599,7 @@ detect all tampering.
 
 ### Explanation
 
-The redundancy check only inspects the last few bytes of the decrypted output. An attacker who
-modifies bytes in the early ciphertext blocks corrupts only the message body — the redundancy
-suffix survives intact and the check passes. Because the check is deterministic and its location
-is known, it provides no security guarantee. A proper MAC uses a secret key and covers the
-entire message, making selective forgery computationally infeasible.
+The redundancy check only inspects the last few bytes of the decrypted output. This means that an attacker who modifies bytes in the early ciphertext blocks corrupts only the message body, and this means that the redundancy suffix survives intact and the check passes. Because the check is deterministic and its location is known, it provides no guarantee on the basis of security. A proper MAC uses a secret key and covers the entire message, making selective forgery computationally illogical and quite infeasible.
 
 ---
 
