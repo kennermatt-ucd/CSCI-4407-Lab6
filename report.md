@@ -919,7 +919,7 @@ python code/task10_comparison.py
 
 **Screenshot 1 — `task10_comparison.py` terminal output**
 
-<!-- Insert screenshot: terminal showing the formatted comparison table -->
+![task 10 comparison table](screenshots/task10.png)
 
 ### Results Table
 
@@ -932,6 +932,13 @@ python code/task10_comparison.py
 | Encrypt-then-MAC   | Yes     | Yes       | **Yes** | Verifies before decrypt; INT-CTXT secure   |
 
 ---
+### Explanation
+
+The comparison shows that confidentiality alone is not enough to secure ciphertexts against tampering. Plain AES-CBC encryption protects privacy, but it does not provide integrity because modified ciphertexts may still decrypt to some output. The redundancy-based approach offers only weak protection because it is not a true authentication mechanism and does not guarantee strong ciphertext integrity.
+
+Encrypt-and-MAC and MAC-then-Encrypt both combine encryption with authentication, but their composition order leaves weaknesses. Encrypt-and-MAC authenticates the plaintext instead of the ciphertext, so the transmitted ciphertext is not directly protected. MAC-then-Encrypt hides the tag inside the encrypted data, but the receiver must still decrypt before verification, which can expose the system to attacks such as padding oracles.
+
+Encrypt-then-MAC is the only construction in this lab that provides both confidentiality and strong ciphertext integrity. Because the tag is computed over the transmitted ciphertext and verified before decryption, any tampering is detected immediately and invalid data is rejected before the decryption algorithm is ever applied.
 
 ## Task 11 — Reflection
 
