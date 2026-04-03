@@ -984,23 +984,23 @@ if __name__ == "__main__":
 
 **Q1: Why is confidentiality alone insufficient?**
 
-<!-- TODO: answer here -->
+Confidentiality alone is insufficient because encryption only hides the contents of a message; it does not guarantee that the ciphertext has not been modified. An attacker may alter ciphertext in transit, and if the system only decrypts without verifying integrity, the receiver may still process corrupted or malicious data. Secure communication requires both privacy and protection against tampering.
 
 **Q2: What does INT-CTXT mean?**
 
-<!-- TODO: answer here -->
+INT-CTXT stands for integrity of ciphertexts. In simple terms, it means an attacker should not be able to create a new ciphertext that will be accepted by the receiver as valid unless it was originally produced by the legitimate sender. A scheme with INT-CTXT security rejects forged or modified ciphertexts instead of decrypting them successfully.
 
 **Q3: Why does integrity matter for secure communication?**
 
-<!-- TODO: answer here -->
+Integrity matters because a receiver must be able to trust that a message has not been changed in transit. Without integrity, an attacker could modify encrypted financial data, system commands, or access-control messages and cause harmful results even if the attacker cannot read the original plaintext. Integrity ensures that only authentic, unmodified ciphertexts are accepted and processed.
 
 **Q4: Why does the order of encryption and MAC matter?**
 
-<!-- TODO: answer here -->
+The order matters because different compositions protect different parts of the data and determine when verification happens. Encrypt-and-MAC authenticates the plaintext but does not directly authenticate the ciphertext. MAC-then-Encrypt requires the receiver to decrypt first and verify later, which can expose the system to attacks on the decryption process. Encrypt-then-MAC is stronger because it authenticates the ciphertext itself and checks the tag before decryption, preventing tampered data from ever reaching the decryption stage.
 
 **Q5: What is the key takeaway from Encrypt-then-MAC?**
 
-<!-- TODO: answer here -->
+The key takeaway from Encrypt-then-MAC is that authenticated encryption must verify integrity before decryption. By computing the MAC over the ciphertext and rejecting any invalid tag immediately, Encrypt-then-MAC provides both confidentiality and strong ciphertext integrity. This makes it the correct generic composition model from the lab and explains why secure modern systems use this approach or dedicated AEAD schemes.
 
 ---
 
