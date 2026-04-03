@@ -671,9 +671,7 @@ python code/task7_encrypt_and_mac.py
 
 **Screenshot 1 — `task7_encrypt_and_mac.py` terminal output**
 
-<!-- Insert screenshot: terminal showing ciphertext hex, MAC tag hex, Verified: YES, and recovered plaintext -->
-
-*What to observe:* The valid case passes verification and recovers the original plaintext.
+![task7](screenshots/task7.png)
 
 ### Explanation
 
@@ -764,11 +762,7 @@ python code/task8_mac_then_encrypt.py
 
 **Screenshot 1 — `task8_mac_then_encrypt.py` terminal output**
 
-<!-- Insert screenshot: terminal showing valid case PASS and tampered case FAIL (detected) -->
-
-*What to observe:* The valid case passes. The tampered case is detected (FAIL) because the
-MAC covers the plaintext which is recovered after decryption — corruption in the ciphertext
-propagates to the decrypted plaintext and breaks the tag comparison.
+![task 8](screenshots/task8.png)
 
 ### Explanation
 
@@ -864,11 +858,8 @@ python code/task9_encrypt_then_mac.py
 
 **Screenshot 1 — `task9_encrypt_then_mac.py` terminal output**
 
-<!-- Insert screenshot: terminal showing Valid case PASS, Ciphertext tampered FAIL (rejected), Tag tampered FAIL (rejected) -->
+![task 9](screenshots/task9.png)
 
-*What to observe:* The valid case passes. Both tampering cases are immediately rejected — no
-decryption occurs for either. This confirms INT-CTXT security: the scheme cannot be fooled
-into decrypting any ciphertext the sender did not produce.
 
 ### Explanation
 
